@@ -1,0 +1,4 @@
+# Optional for core tests, required for real OCR. CPU-only inference.
+# Keep this pair explicit; validate upgrades with tools/ocr_smoke.py.
+paddlepaddle==3.2.2
+paddleocr==3.3.2
