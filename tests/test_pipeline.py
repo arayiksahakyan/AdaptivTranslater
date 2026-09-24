@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from app.errors import CaptureError, OCRError, TranslationError
+from app.ocr.paddle_ocr import PaddleOCRProvider
 from app.translation.cache import TranslationCache
 from app.translation.mock_translator import MockTranslationProvider
 
@@ -180,3 +181,57 @@ class FakeRealTranslator:
     def translate(self, text, source, target):
         self.calls.append((text, source, target))
         return "real translation"
+
+
+@pytest.mark.parametrize("retry_change", ["region", "source_language", "provider_name"])
+def test_initialization_latches_across_error_revisions_and_explicit_change_retries(
+    pipeline, job, capture, caplog, retry_change
+):
+    calls = []
+
+    class Engine:
+        def predict(self, image):
+            return []
+
+    def factory(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("PRIVATE native initialization details")
+        return Engine()
+
+    pipeline.ocr = PaddleOCRProvider(engine_factory=factory)
+    first = pipeline.run(job)
+    assert first.status == "error" and "Move/resize" in first.error
+    restored = []
+    # The real controller increments the revision on every error display.
+    for revision in range(2, 22):
+        result = pipeline.run(replace(job, revision=revision), lambda: restored.append(True))
+        assert result.status == "error" and result.error == first.error
+    assert len(calls) == 1 and capture.calls == 1 and len(restored) == 20
+    assert "PRIVATE" not in caplog.text + first.error
+    assert pipeline.run(job, cancelled=lambda: True).status == "cancelled"
+    change = {
+        "region": replace(job.region, left=job.region.left + 1),
+        "source_language": "en",
+        "provider_name": "mock",
+    }
+    retry_job = replace(job, revision=23, **{retry_change: change[retry_change]})
+    assert pipeline.run(retry_job).status == "empty"
+    assert len(calls) == 2 and capture.calls == 2
+    assert pipeline.run(retry_job).status == "unchanged_image"
+
+
+def test_failed_explicit_retry_is_latched_again(pipeline, job):
+    calls = []
+
+    def factory(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("native failure")
+
+    pipeline.ocr = PaddleOCRProvider(engine_factory=factory)
+    assert pipeline.run(job).status == "error"
+    moved = replace(job, region=replace(job.region, left=0), revision=2)
+    assert pipeline.run(moved).status == "error"
+    for revision in range(3, 10):
+        assert pipeline.run(replace(moved, revision=revision)).status == "error"
+    assert len(calls) == 2

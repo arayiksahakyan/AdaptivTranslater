@@ -13,6 +13,10 @@ class OCRError(LensError):
     pass
 
 
+class OCRInitializationError(OCRError):
+    """Loading failed; wait for a user change to the region/language/provider."""
+
+
 class TranslationError(LensError):
     pass
 

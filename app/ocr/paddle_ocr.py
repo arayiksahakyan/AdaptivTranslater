@@ -7,8 +7,9 @@ from typing import Any
 import numpy as np
 
 from app.capture.base import RGBImage
-from app.errors import OCRError
+from app.errors import OCRError, OCRInitializationError
 from app.ocr.base import OCRResult
+from app.ocr.paddle_config import paddle_options
 
 logger = logging.getLogger(__name__)
 
@@ -46,38 +47,27 @@ class PaddleOCRProvider:
                 from paddleocr import PaddleOCR
 
                 factory = PaddleOCR
-            except ImportError:
-                raise OCRError(
+            except ImportError as exc:
+                raise OCRInitializationError(
                     "PaddleOCR is unavailable. Install requirements-ocr.txt in this venv."
-                ) from None
+                    " Move/resize the lens to retry initialization."
+                ) from exc
+            except Exception as exc:
+                logger.warning("OCR import failed (%s)", type(exc).__name__)
+                raise OCRInitializationError(
+                    "PaddleOCR could not initialize. Run tools.paddle_diagnostic for details. "
+                    "Move/resize the lens to retry initialization."
+                ) from exc
         logger.info("Initializing local PaddleOCR; first use may download model weights")
         try:
-            # Paddle 3 ignores `lang` when *any* explicit model name is supplied.
-            # Select both mobile models for English; otherwise let Paddle resolve
-            # a compatible detection/recognition pair for the chosen language.
-            model_options = (
-                {
-                    "text_detection_model_name": "PP-OCRv5_mobile_det",
-                    "text_recognition_model_name": "en_PP-OCRv5_mobile_rec",
-                }
-                if self.language == "en"
-                else {"lang": self.language, "ocr_version": "PP-OCRv5"}
-            )
-            self._engine = factory(
-                **model_options,
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=False,
-                device="cpu",
-                enable_mkldnn=False,
-                cpu_threads=4,
-            )
+            self._engine = factory(**paddle_options(self.language))
         except Exception as exc:
             logger.warning("OCR initialization failed (%s)", type(exc).__name__)
-            raise OCRError(
+            raise OCRInitializationError(
                 "OCR model could not load. Check OCR language, model downloads, and "
-                "the pinned CPU dependencies in DEVELOPMENT.md."
-            ) from None
+                "the pinned CPU dependencies in DEVELOPMENT.md. "
+                "Move/resize the lens to retry initialization."
+            ) from exc
 
     def recognize(self, image: RGBImage) -> list[OCRResult]:
         self._load()
@@ -87,7 +77,7 @@ class PaddleOCRProvider:
             return parse_results(self._engine.predict(bgr))
         except Exception as exc:
             logger.warning("OCR inference failed (%s)", type(exc).__name__)
-            raise OCRError("OCR failed. Check model compatibility and try again.") from None
+            raise OCRError("OCR failed. Check model compatibility and try again.") from exc
 
     def close(self) -> None:
         self._engine = None

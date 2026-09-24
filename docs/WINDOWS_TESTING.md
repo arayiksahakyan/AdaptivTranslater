@@ -1,6 +1,10 @@
 # Windows acceptance procedure
 
-**REQUIRES WINDOWS VERIFICATION** — no Windows execution yet. Leave every checkbox
+**REQUIRES WINDOWS VERIFICATION** — current OCR initialization fails on Windows 11 /
+Python 3.12.3 (2026-09-25 user report), despite Paddle finding the cached detector.
+Root cause remains unknown. The checked items below record only the earlier
+2026-09-20 report and do not establish current OCR success. Run the new diagnostics
+in `../DEVELOPMENT.md` before continuing acceptance. Leave each remaining checkbox
 unchecked until that exact test has run on Windows. Linux/offscreen checks do not
 satisfy this procedure. Use non-sensitive sample text; do not save private screens.
 
@@ -66,6 +70,10 @@ No file is written by normal application capture. This probe has not run on Wind
 
 ## OCR, cache, errors, and privacy
 
+- [ ] Run `tools.paddle_diagnostic` and retain the full environment, CPU runtime,
+  direct initialization, and original exception/traceback output.
+- [ ] After failed initialization, verify automatic jobs do not recreate PaddleOCR.
+  Move/resize the lens to explicitly retry; another failure must latch again.
 - [x] Allow initial model download, then read the sample English text through real OCR.
   The output is labeled `MOCK`; it proves routing, not linguistic translation.
 - [x] With the sample text, the overlay rendered `[MOCK en → ru]` followed by

@@ -250,6 +250,55 @@ Use `python -m app.main --help` for the complete list. Settings are not persiste
 
 ## Troubleshooting
 
+### Diagnose the current Windows Paddle initialization failure
+
+The 2026-09-25 Windows 11 / Python 3.12.3 report finds cached
+`PP-OCRv5_mobile_det`, then fails with `RuntimeError`. **Root cause unknown;
+Windows OCR is not currently working.** Preserve dependency versions until the
+original native traceback is available. `No ccache found` alone is not evidence
+of the cause.
+
+From the repository root in PowerShell, after pulling the diagnostic change:
+
+```powershell
+git pull --ff-only origin main
+$env:PADDLE_PDX_CACHE_HOME = Join-Path $PWD '.paddle-cache'
+$env:PADDLE_PDX_MODEL_SOURCE = 'bos'
+$env:PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK = 'True'
+.venv\Scripts\python.exe -m tools.paddle_diagnostic 2>&1 | Tee-Object -FilePath paddle-diagnostic.log
+.venv\Scripts\python.exe -m tools.ocr_smoke 2>&1 | Tee-Object -FilePath ocr-smoke.log
+```
+
+Both tools print Python/platform/architecture, installed dependency versions,
+the three Paddle environment settings, cache/model paths, and model options.
+Failures print `=== ORIGINAL EXCEPTION ===` and the full chained traceback,
+including the original exception class, message, and Paddle/PaddleX source frames.
+Share both full logs. Ordinary app logging remains sanitized. The logs are ignored
+by Git; tools do not capture the screen or persist images.
+
+The direct diagnostic first imports Paddle, prints its version/device, and executes
+a tiny CPU tensor addition. On runtime failure it exits 1 without attempting OCR.
+Otherwise it constructs PaddleOCR directly with the application's same English
+mobile pair and CPU settings, bypassing the Translation Lens provider. It exits 1
+on failure, 0 on successful initialization; this tool does not test inference.
+The smoke tool then tests the wrapped provider and generated-text inference.
+Neither tool changes environment variables or dependency versions. Missing weights
+may download normally; only the configured English detector/recognizer are selected.
+
+A direct failure shows reproduction outside our wrapper. Direct success plus smoke
+failure requires examining the smoke traceback: it may be an inference failure, not
+necessarily an integration fault. Successful CPU arithmetic alone does not prove
+that model initialization will work.
+
+After initialization fails in the desktop, scheduled jobs retain the useful error
+but skip further capture/model initialization. **Move or resize the lens to retry**;
+language/provider changes also allow one new attempt. Pause/resume alone does not
+reset this latch, because the existing UI also increments revisions on every error.
+Its existing `Retrying` suffix refers to scheduled jobs, not further initialization
+attempts. No UI source was changed. Verify this behavior on Windows after diagnosis.
+
+### Other troubleshooting
+
 - Missing OCR dependency/model: install the OCR requirements; check first-run
   network access. The control panel shows provider errors; pause before retrying.
 - Wrong script recognition: source selection affects translation; choose the real

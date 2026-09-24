@@ -2,13 +2,13 @@
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Literal
 
 from app.capture.base import CaptureProvider, CaptureRegion
 from app.capture.change_detector import ImageChangeDetector
-from app.errors import LensError, TranslationError
+from app.errors import LensError, OCRInitializationError, TranslationError
 from app.ocr.base import OCRProvider
 from app.pipeline.text_normalization import normalize_text
 from app.translation.base import TranslationProvider
@@ -67,6 +67,8 @@ class TranslationPipeline:
         self.log_text = log_text
         self._context: PipelineJob | None = None
         self._last_text: str | None = None
+        # Store only the safe message, never an exception retaining image frames.
+        self._ocr_initialization_failure: tuple[PipelineJob, str] | None = None
 
     def run(
         self,
@@ -87,6 +89,14 @@ class TranslationPipeline:
             validate_languages(job.source_language, job.target_language)
             if cancelled():
                 return result("cancelled")
+            if self._ocr_initialization_failure is not None:
+                failed_context, message = self._ocr_initialization_failure
+                if replace(job, revision=0) == failed_context:
+                    on_captured()
+                    return result("error", error=message)
+                # Error display itself increments revisions, so only a real change
+                # of region/language/provider permits another initialization attempt.
+                self._ocr_initialization_failure = None
             started = perf_counter()
             try:
                 image = self.capture.capture(job.region)
@@ -153,6 +163,8 @@ class TranslationPipeline:
             public = (
                 str(exc) if isinstance(exc, LensError) else "Processing failed. Pause and retry."
             )
+            if isinstance(exc, OCRInitializationError):
+                self._ocr_initialization_failure = (replace(job, revision=0), public)
             return result("error", error=public)
 
     def close(self) -> None:

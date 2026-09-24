@@ -127,6 +127,32 @@ version-specific offline adapter must be re-audited when Argos/MiniSBD changes.
 Native translation calls, like OCR, cannot be safely interrupted; stale results are
 discarded and shutdown waits for the current call. No new backend or billing setup.
 
+## ADR-009 — Explicit Paddle diagnostics and bounded initialization retries
+
+Decision (2026-09-25): Preserve original OCR exceptions with `raise ... from exc`;
+keep ordinary public messages/logs sanitized. Developer smoke/direct tools print
+environment/cache metadata and full chained tracebacks. Share pure model options
+between the adapter and direct constructor, without importing the adapter in the
+direct tool. Test a CPU tensor operation before creating PaddleOCR.
+
+Reason: Real Windows 11 / Python 3.12.3 finds the detector cache but initialization
+fails with a RuntimeError hidden by `from None`. The actual cause is unknown; model
+presence and a ccache warning do not diagnose it. No dependency versions change.
+
+Use a typed initialization error and pipeline failure latch keyed by region,
+languages, and provider, ignoring revisions. The existing controller increments
+revisions during automatic error handling, so revision-only latching would loop.
+An explicit move/resize or settings change permits one retry; repeated failures
+are latched again. Pause/resume alone does not clear this latch. UI code is outside
+scope and remains unchanged, including its existing retry suffix. Store only the
+safe message/context, not exceptions retaining images through tracebacks. Keep
+transient inference and translation retry behavior unchanged.
+
+Consequences: Diagnostic logs include native error details and local paths by
+design, but use only generated text. Direct initialization does not test inference.
+Linux test/smoke success is not Windows acceptance. Windows output must guide the
+next fix; do not infer dependency incompatibilities or propose speculative pins.
+
 ## Reference documentation consulted
 
 - [Qt high-DPI behavior](https://doc.qt.io/qtforpython-6/overviews/qtdoc-highdpi.html)

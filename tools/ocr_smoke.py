@@ -9,10 +9,7 @@ import json
 from pathlib import Path
 from time import perf_counter
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-
-from app.ocr.paddle_ocr import PaddleOCRProvider
+from tools.paddle_diagnostic import print_environment, print_exception
 
 
 def main() -> int:
@@ -36,12 +33,19 @@ def main() -> int:
     font_path = next((p for p in candidates if p is not None and p.exists()), None)
     if font_path is None:
         parser.error("Supply --font with a local TrueType font.")
-    image = Image.new("RGB", (700, 180), "white")
-    ImageDraw.Draw(image).text(
-        (24, 45), "Hello world 123", fill="black", font=ImageFont.truetype(str(font_path), 48)
-    )
-    provider = PaddleOCRProvider("en")
+    print_environment()
+    provider = None
     try:
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFont
+
+        from app.ocr.paddle_ocr import PaddleOCRProvider
+
+        image = Image.new("RGB", (700, 180), "white")
+        ImageDraw.Draw(image).text(
+            (24, 45), "Hello world 123", fill="black", font=ImageFont.truetype(str(font_path), 48)
+        )
+        provider = PaddleOCRProvider("en")
         runs = []
         for _ in range(args.repeat):
             started = perf_counter()
@@ -58,8 +62,12 @@ def main() -> int:
             )
         print(json.dumps({"runs": runs}, ensure_ascii=False))
         return 0 if all(run["passed"] for run in runs) else 1
+    except Exception as exc:
+        print_exception(exc)
+        return 1
     finally:
-        provider.close()
+        if provider is not None:
+            provider.close()
 
 
 if __name__ == "__main__":

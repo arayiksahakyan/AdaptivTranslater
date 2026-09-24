@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from app.errors import OCRError
+from app.errors import OCRError, OCRInitializationError
 from app.ocr.paddle_ocr import PaddleOCRProvider, parse_results
 
 
@@ -71,13 +71,17 @@ def test_non_english_language_is_not_overridden_by_a_model_name():
 
 
 def test_initialization_errors_are_safe_and_retryable():
+    original = RuntimeError("token / private details")
+
     def failed_factory(**kwargs):
-        raise RuntimeError("token / private details")
+        raise original
 
     provider = PaddleOCRProvider(engine_factory=failed_factory)
     with pytest.raises(OCRError, match="could not load") as error:
         provider.recognize(np.zeros((10, 10, 3), dtype=np.uint8))
     assert "private" not in str(error.value) and provider._engine is None
+    assert isinstance(error.value, OCRInitializationError)
+    assert error.value.__cause__ is original
 
 
 def test_inference_errors_are_safe():
@@ -89,3 +93,21 @@ def test_inference_errors_are_safe():
     with pytest.raises(OCRError, match="OCR failed") as error:
         provider.recognize(np.zeros((10, 10, 3), dtype=np.uint8))
     assert "private" not in str(error.value)
+    assert isinstance(error.value.__cause__, RuntimeError)
+
+
+@pytest.mark.parametrize("original", [ImportError("missing DLL"), RuntimeError("native failure")])
+def test_import_failure_preserves_original_exception(monkeypatch, original):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def import_module(name, *args, **kwargs):
+        if name == "paddleocr":
+            raise original
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_module)
+    with pytest.raises(OCRInitializationError) as error:
+        PaddleOCRProvider().recognize(np.zeros((10, 10, 3), dtype=np.uint8))
+    assert error.value.__cause__ is original

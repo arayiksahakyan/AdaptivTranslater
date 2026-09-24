@@ -3,6 +3,7 @@ from PySide6.QtCore import QObject, QPoint, Qt, Signal
 from app.capture.base import CaptureRegion
 from app.config import AppConfig
 from app.errors import PlatformError
+from app.ocr.paddle_ocr import PaddleOCRProvider
 from app.pipeline.translation_pipeline import PipelineResult
 from app.ui.control_panel import ControlPanel
 from app.ui.controller import LensController
@@ -240,4 +241,37 @@ def test_provider_selection_privacy_revision_and_error_recovery(qtbot):
         runner.jobs[-1].revision, "translated", translated_text="Привет",
     ))
     assert "Local (Offline)" in panel.status.text() and "mock" not in panel.status.text()
+    controller.shutdown()
+
+
+def test_controller_error_revisions_do_not_retry_ocr_and_resize_allows_retry(qtbot, pipeline):
+    controller, lens, panel, runner = build_controller(qtbot)
+    attempts = []
+
+    class Engine:
+        def predict(self, image):
+            return []
+
+    def factory(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            raise RuntimeError("native failure")
+        return Engine()
+
+    pipeline.ocr = PaddleOCRProvider(engine_factory=factory)
+    controller.toggle_running()
+    controller.timer.stop()
+    for _ in range(5):
+        outcome = pipeline.run(runner.jobs[-1])
+        runner.complete(outcome)
+        assert outcome.status == "error" and "Move/resize" in panel.status.text()
+        controller._next_attempt = 0  # Exercise the next scheduled attempt without sleeping.
+        controller.tick()
+    assert len(attempts) == 1
+    runner.complete(pipeline.run(runner.jobs[-1]))
+    lens.resize(lens.width() + 40, lens.height() + 20)
+    controller.tick()
+    outcome = pipeline.run(runner.jobs[-1])
+    runner.complete(outcome)
+    assert outcome.status == "empty" and len(attempts) == 2
     controller.shutdown()
