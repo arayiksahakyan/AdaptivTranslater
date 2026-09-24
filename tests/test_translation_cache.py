@@ -13,6 +13,14 @@ def test_languages_are_part_of_key():
     assert (cache.hits, cache.misses) == (2, 1)
 
 
+def test_provider_is_part_of_key():
+    cache = TranslationCache()
+    cache.put(("mock", "en", "ru", "same"), "mock result")
+    cache.put(("google-cloud-basic", "en", "ru", "same"), "real result")
+    assert cache.get(("mock", "en", "ru", "same")) == "mock result"
+    assert cache.get(("google-cloud-basic", "en", "ru", "same")) == "real result"
+
+
 def test_lru_hits_refresh_recency_and_evict():
     cache = TranslationCache(2)
     a, b, c = [("auto", "en", text) for text in "abc"]

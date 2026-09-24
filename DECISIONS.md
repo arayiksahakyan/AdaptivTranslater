@@ -41,12 +41,36 @@ Future providers need timeouts; process isolation can address hard cancellation 
 
 ## ADR-005 — Deliberate mock translation and privacy defaults
 
-Decision: Only mock translation ships initially, clearly labeled in UI/output.
-Keep screenshots/cache ephemeral; ordinary debug logs omit text. Do not implement
-undocumented free translation endpoints.
-Reason: Prove the pipeline without fees, keys, unsafe scraping, or cloud scope.
-Consequences: This prototype does not yet perform real linguistic translation.
-Future providers implement the same contract; commercial services are planning only.
+Decision: Keep MockTranslationProvider as the default offline path, and add a
+separate opt-in Google Cloud provider with the same contract. Keep screenshots/cache
+ephemeral; ordinary debug logs omit text. Do not implement undocumented free endpoints.
+Reason: Preserve deterministic offline development while allowing real text-only
+translation when the user configures a credential. Consequences: real translation
+has network, billing, privacy, and provider-availability implications. Future
+providers implement the same contract; commercial backend services remain planning only.
+
+Default-provider choice superseded by ADR-008; Mock remains available.
+
+## ADR-007 — Google Cloud Translation Basic as first real provider
+
+Decision: Add a Google Cloud Translation Basic REST adapter using Python's standard
+HTTPS client and an API key from `GOOGLE_TRANSLATE_API_KEY`. Keep Mock as the default
+and expose both through an injected provider registry.
+
+Reason: Google supports English → Russian and a broad language set through a small
+JSON REST request. The request can contain only normalized OCR text, avoiding image
+uploads and a heavyweight SDK in the desktop MVP. A timeout and sanitized errors fit
+the existing worker/retry path.
+
+Alternatives: DeepL (strong quality but narrower language coverage and an additional
+provider-specific account), Azure Translator (similar credentials and setup), public
+LibreTranslate instances (variable availability/privacy), and local Argos models
+(offline but weaker quality/model packaging for this MVP).
+
+Consequences: A Google API key, enabled API, billing, and quotas are required for
+real translation. Requests may incur charges. The key is never hard-coded or logged.
+Network availability and Google behavior remain runtime dependencies. Future
+providers implement the same protocol and receive provider-specific cache entries.
 
 ## ADR-006 — Explicit English mobile model pair; public mss APIs
 
@@ -64,6 +88,45 @@ needs validation. Optional OCR pins are deliberate; core dependency ranges permi
 Python 3.11+ resolution, and an exact Linux snapshot records what was executed.
 Recheck adapters and real inference on dependency updates. Windows remains untested.
 
+## ADR-008 — Free offline Argos as preferred real development provider
+
+Decision (2026-09-24): Add `argos-local` using Argos Translate 1.11.0, pin MiniSBD
+0.9.5 for its audited local-path behavior, and default to Local / English → Russian.
+Retain Mock and optional Google Cloud Basic without changing Google's API contract.
+This supersedes only the default-provider choice in ADR-005/007.
+
+Reason: The MVP needs real translation without billing verification, credentials,
+an account, or a backend. Local models keep all OCR text on the computer. Existing
+worker scheduling, revision cancellation, provider-aware cache, and error recovery
+already support this integration. Keep runtime installation optional for core tests.
+
+Argos's normal sentence splitting can download auxiliary models. Force OPENNMT,
+CPU, and MiniSBD before importing the engine, disable Argos payload logging, and
+resolve every translation leg to an existing absolute MiniSBD file before inference.
+Set ONNX Runtime's telemetry opt-out before initialization and disable its telemetry
+API before translation sessions; official runtime builds otherwise enable telemetry.
+Only an explicit CLI installs translation/auxiliary models. Missing resources report
+an actionable error with Mock available; no silent download or provider switch.
+Use Argos's installed graph for pivots; retain translators for the worker lifetime.
+Require restart after external model changes and explicit source selection.
+
+Alternatives: Waiting for Google billing, undocumented public endpoints, automatically
+fetching models during app startup, or older Argos/dependency downgrades. None meets
+the current combination of offline privacy, explicit downloads, and dependency scope.
+
+Dependency evidence: Official package/source inspection plus combined binary-wheel
+resolution for Windows x64 Python 3.12 and Linux found no metadata conflicts with
+PaddleOCR 3.3.2 / PaddlePaddle 3.2.2. No unrelated versions were downgraded. Native
+PyTorch/ONNX/CTranslate2/Paddle coexistence and actual Windows output still require
+real testing. Automated Argos tests use injected doubles and download no models.
+
+Consequences: Free inference needs local disk/RAM and upfront model downloads.
+Quality and speed vary by language/model; pivots may reduce quality and increase
+latency. Python runtime dependencies are larger than the Argos wheel. The small
+version-specific offline adapter must be re-audited when Argos/MiniSBD changes.
+Native translation calls, like OCR, cannot be safely interrupted; stale results are
+discarded and shutdown waits for the current call. No new backend or billing setup.
+
 ## Reference documentation consulted
 
 - [Qt high-DPI behavior](https://doc.qt.io/qtforpython-6/overviews/qtdoc-highdpi.html)
@@ -74,3 +137,8 @@ Recheck adapters and real inference on dependency updates. Windows remains untes
 - [Win32 hotkey registration](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey)
 - [Win32 layered windows](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features)
 - [PaddlePaddle 3.2.2 Windows wheels](https://pypi.org/project/paddlepaddle/3.2.2/#files)
+- [Argos Translate 1.11.0 release](https://pypi.org/project/argostranslate/1.11.0/)
+- [Argos 1.11.0 sentence splitting](https://github.com/argosopentech/argos-translate/blob/v1.11.0/argostranslate/sbd.py)
+- [Argos official model index](https://github.com/argosopentech/argospm-index/blob/main/index.json)
+- [MiniSBD source and models](https://github.com/LibreTranslate/MiniSBD)
+- [ONNX Runtime privacy controls](https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md)

@@ -210,3 +210,34 @@ def test_click_through_failure_preserves_edit_mode(qtbot):
     assert not lens.click_through and "Mode: Edit" in panel.mode_button.text()
     assert "Native style failed" in panel.status.text()
     controller.shutdown()
+
+
+def test_provider_selection_privacy_revision_and_error_recovery(qtbot):
+    controller, lens, panel, runner = build_controller(qtbot)
+    assert panel.provider.currentData() == "argos-local"
+    assert "no text leaves your computer" in panel.privacy_note.text()
+    controller.toggle_running()
+    first = runner.jobs[-1]
+    assert first.provider_name == "argos-local"
+    runner.complete(PipelineResult(first.revision, "error", error="Local model missing"))
+    assert panel.start_button.isEnabled() and "Local model missing" in panel.status.text()
+    before = controller.revision
+    panel.provider.setCurrentIndex(panel.provider.findData("mock"))
+    assert controller.revision > before and runner.cancelled
+    assert controller.provider == "mock" and "no real translation" in panel.privacy_note.text()
+    controller.tick()
+    mock_job = runner.jobs[-1]
+    assert mock_job.provider_name == "mock"
+    runner.complete(PipelineResult(mock_job.revision, "translated", translated_text="[MOCK]"))
+    assert lens.output.text() == "[MOCK]"
+    panel.provider.setCurrentIndex(panel.provider.findData("google-cloud-basic"))
+    assert "sent to Google Cloud" in panel.privacy_note.text()
+    panel.provider.setCurrentIndex(panel.provider.findData("argos-local"))
+    runner.complete(PipelineResult(mock_job.revision, "translated", translated_text="STALE"))
+    assert not lens.output.text()
+    controller.tick()
+    runner.complete(PipelineResult(
+        runner.jobs[-1].revision, "translated", translated_text="Привет",
+    ))
+    assert "Local (Offline)" in panel.status.text() and "mock" not in panel.status.text()
+    controller.shutdown()

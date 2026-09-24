@@ -159,3 +159,24 @@ def test_mock_explicitly_labels_output_and_validates_languages():
     assert provider.translate("Hello", "auto", "ru") == "[MOCK auto → ru]\nHello"
     with pytest.raises(TranslationError):
         provider.translate("Hello", "bad", "ru")
+
+
+def test_provider_selection_uses_provider_specific_cache_key(pipeline, job, capture):
+    real = FakeRealTranslator()
+    pipeline.providers["real"] = real
+    assert pipeline.run(job).status == "translated"
+    real_job = replace(job, provider_name="real")
+    assert pipeline.run(real_job).status == "translated"
+    assert len(real.calls) == 1
+    assert pipeline.run(real_job).status == "unchanged_image"
+
+
+class FakeRealTranslator:
+    provider_id = "real"
+
+    def __init__(self):
+        self.calls = []
+
+    def translate(self, text, source, target):
+        self.calls.append((text, source, target))
+        return "real translation"

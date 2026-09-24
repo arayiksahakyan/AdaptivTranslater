@@ -14,7 +14,7 @@ Position it under the lens. The default translation is explicitly mock output.
 
 ## Lens and controls
 
-- [ ] Run `.venv\Scripts\python.exe -m app.main --ocr-language en`.
+- [x] Run `.venv\Scripts\python.exe -m app.main --ocr-language en`.
   Both windows appear; no traceback; status identifies mock translation.
 - [ ] See content through the center; border and output remain legible.
 - [ ] Focus Notepad: lens stays above it. Test ordinary and maximized windows.
@@ -66,10 +66,15 @@ No file is written by normal application capture. This probe has not run on Wind
 
 ## OCR, cache, errors, and privacy
 
-- [ ] Allow initial model download, then read the sample text through real OCR.
+- [x] Allow initial model download, then read the sample English text through real OCR.
   The output is labeled `MOCK`; it proves routing, not linguistic translation.
+- [x] With the sample text, the overlay rendered `[MOCK en → ru]` followed by
+  `HELLO WORLD` and `THIS IS A TEST`.
 - [ ] Run `.venv\Scripts\python.exe -m tools.ocr_smoke` separately. Both generated
   sample runs report `passed: true`; record timings and model initialization errors.
+- [ ] Set `GOOGLE_TRANSLATE_API_KEY`, start with
+  `--provider google-cloud-basic --source en --target ru`, and verify a real
+  English → Russian response. Record quota/API errors without exposing the key.
 - [ ] Hold content still: debug timings show no repeated OCR on identical images.
 - [ ] Change visual decoration without changing text: no new translation call.
 - [ ] Show A, then B, then A; the last result reports a cache hit.
@@ -102,6 +107,17 @@ No file is written by normal application capture. This probe has not run on Wind
   exclusive-fullscreen capture limitations; these modes are not an MVP guarantee.
 
 ## Result record
+
+### Recorded user verification — 2026-09-20
+
+The user tested the application on a real Windows machine. The following path was
+observed: screen capture → PaddleOCR → recognized English text →
+`MockTranslationProvider` → overlay rendering. The sample was `HELLO WORLD` and
+`THIS IS A TEST`, rendered as `[MOCK en → ru]` followed by those lines.
+
+This evidence does not mark coordinate precision, DPI, multiple-monitor behavior,
+capture exclusion/contamination, click-through, hotkeys, sustained operation, or
+Google Cloud Translation. Those checks remain unchecked below.
 
 ```text
 Date / tester:

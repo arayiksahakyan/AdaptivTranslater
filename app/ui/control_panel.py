@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.translation.provider import LANGUAGES
+from app.translation.registry import PROVIDER_LABELS
 
 
 class ControlPanel(QWidget):
@@ -17,9 +18,12 @@ class ControlPanel(QWidget):
     mode_requested = Signal()
     edit_requested = Signal()
     languages_changed = Signal(str, str)
+    provider_changed = Signal(str)
     close_requested = Signal()
 
-    def __init__(self, source: str, target: str, ocr_language: str) -> None:
+    def __init__(
+        self, source: str, target: str, ocr_language: str, provider: str = "argos-local",
+    ) -> None:
         super().__init__()
         self.setWindowTitle("Translation Lens")
         self.setMinimumWidth(340)
@@ -28,10 +32,18 @@ class ControlPanel(QWidget):
         title = QLabel("Translation Lens")
         title.setStyleSheet("font-size: 23px; font-weight: 600;")
         layout.addWidget(title)
-        note = QLabel("Local OCR · MOCK translation (no real translation yet)")
+        note = QLabel("Local OCR · translation provider selected below")
         note.setWordWrap(True)
         layout.addWidget(note)
         form = QFormLayout()
+        self.provider = QComboBox()
+        for identifier, label in PROVIDER_LABELS.items():
+            self.provider.addItem(label, identifier)
+        self.provider.setItemData(
+            self.provider.findData("argos-local"), "Argos Translate", Qt.ItemDataRole.ToolTipRole
+        )
+        self.provider.setCurrentIndex(self.provider.findData(provider))
+        form.addRow("Translation provider", self.provider)
         self.source = QComboBox()
         self.target = QComboBox()
         self.source.addItem("Auto", "auto")
@@ -43,6 +55,10 @@ class ControlPanel(QWidget):
         form.addRow("Source", self.source)
         form.addRow("Target", self.target)
         layout.addLayout(form)
+        self.privacy_note = QLabel()
+        self.privacy_note.setWordWrap(True)
+        layout.addWidget(self.privacy_note)
+        self._update_privacy_note()
         model_note = QLabel(
             f"OCR model language: {ocr_language}. Set at launch with --ocr-language."
         )
@@ -71,9 +87,24 @@ class ControlPanel(QWidget):
         layout.addWidget(quit_button)
         self.source.currentIndexChanged.connect(self._languages_changed)
         self.target.currentIndexChanged.connect(self._languages_changed)
+        self.provider.currentIndexChanged.connect(self._provider_changed)
 
     def _languages_changed(self) -> None:
         self.languages_changed.emit(self.source.currentData(), self.target.currentData())
+
+    def _provider_changed(self) -> None:
+        self._update_privacy_note()
+        self.provider_changed.emit(self.provider.currentData())
+
+    def _update_privacy_note(self) -> None:
+        notes = {
+            "argos-local": "Local translation — no text leaves your computer. "
+            "Choose a source language; installed language models are required.",
+            "mock": "Mock output — repeats text with a label; no real translation.",
+            "google-cloud-basic": "Recognized text is sent to Google Cloud. "
+            "An API key and billing are required.",
+        }
+        self.privacy_note.setText(notes[self.provider.currentData()])
 
     def set_running(self, running: bool) -> None:
         self.start_button.setText("Pause Translation" if running else "Start Translation")

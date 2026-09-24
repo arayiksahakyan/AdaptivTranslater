@@ -11,6 +11,7 @@ from app.errors import LensError
 from app.pipeline.translation_pipeline import PipelineJob, PipelineResult
 from app.pipeline.worker import PipelineRunner
 from app.platform.base import PlatformAdapter
+from app.translation.registry import PROVIDER_LABELS
 from app.ui.control_panel import ControlPanel
 from app.ui.overlay import LensOverlay
 
@@ -41,6 +42,7 @@ class LensController(QObject):
         self._errors = 0
         self._logged_region = None
         self.source, self.target = config.source_language, config.target_language
+        self.provider = config.provider
         self.timer = QTimer(self)
         self.timer.setInterval(config.capture_interval_ms)
         self.timer.timeout.connect(self.tick)
@@ -51,6 +53,7 @@ class LensController(QObject):
         panel.mode_requested.connect(self.toggle_mode)
         panel.edit_requested.connect(self.edit_mode)
         panel.languages_changed.connect(self.set_languages)
+        panel.provider_changed.connect(self.set_provider)
         panel.close_requested.connect(self.shutdown)
         lens.close_requested.connect(self.shutdown)
         lens.edit_requested.connect(self.edit_mode)
@@ -90,6 +93,13 @@ class LensController(QObject):
     def set_languages(self, source: str, target: str) -> None:
         self.source, self.target = source, target
         self.invalidate()
+
+    @Slot(str)
+    def set_provider(self, provider: str) -> None:
+        self.provider = provider
+        self.invalidate()
+        label = PROVIDER_LABELS[provider]
+        self.panel.set_status(f"Provider selected: {label}.")
 
     @Slot()
     def toggle_running(self) -> None:
@@ -148,7 +158,7 @@ class LensController(QObject):
             )
             self._show_error(message)
             return
-        self._pending = PipelineJob(self.revision, region, self.source, self.target)
+        self._pending = PipelineJob(self.revision, region, self.source, self.target, self.provider)
         if region != self._logged_region:
             logger.debug("Physical capture region: %s", region)
             self._logged_region = region
@@ -212,7 +222,8 @@ class LensController(QObject):
         if result.status == "translated":
             self.lens.set_translation(result.translated_text)
             self.panel.set_status(
-                "Running — mock output" + (" (cache hit)" if result.cache_hit else "")
+                f"Running — {PROVIDER_LABELS[self.provider]}"
+                + (" (cache hit)" if result.cache_hit else "")
             )
         elif result.status == "empty":
             self.lens.set_translation("")

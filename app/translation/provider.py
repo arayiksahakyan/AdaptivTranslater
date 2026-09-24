@@ -16,6 +16,19 @@ LANGUAGES = (
     ("zh", "Chinese"),
     ("ar", "Arabic"),
     ("hy", "Armenian"),
+    ("nl", "Dutch"),
+    ("pl", "Polish"),
+    ("tr", "Turkish"),
+    ("cs", "Czech"),
+    ("sv", "Swedish"),
+    ("da", "Danish"),
+    ("fi", "Finnish"),
+    ("no", "Norwegian"),
+    ("ro", "Romanian"),
+    ("hu", "Hungarian"),
+    ("vi", "Vietnamese"),
+    ("id", "Indonesian"),
+    ("he", "Hebrew"),
 )
 LANGUAGE_CODES = frozenset(code for code, _ in LANGUAGES)
 

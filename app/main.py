@@ -10,7 +10,7 @@ from app.config import AppConfig
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Translation Lens — local OCR, labeled mock translation"
+        description="Translation Lens — local OCR and selectable translation"
     )
     parser.add_argument("--capture-mode", choices=("auto", "hide"), default="auto")
     parser.add_argument("--interval-ms", type=int, default=350)
@@ -18,8 +18,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--ocr-language", default="en", help="Paddle model language; independent of source Auto"
     )
-    parser.add_argument("--source", default="auto")
-    parser.add_argument("--target", default="en")
+    parser.add_argument("--source", default="en")
+    parser.add_argument("--target", default="ru")
+    parser.add_argument(
+        "--provider",
+        choices=("mock", "google-cloud-basic", "argos-local"),
+        default="argos-local",
+        help="Local requires installed models; Google requires GOOGLE_TRANSLATE_API_KEY",
+    )
     parser.add_argument("--confidence", type=float, default=0.6)
     parser.add_argument(
         "--image-threshold", type=float, default=2.0, help="Mean grayscale difference"
@@ -53,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
             ocr_language=args.ocr_language,
             source_language=args.source,
             target_language=args.target,
+            provider=args.provider,
             min_ocr_confidence=args.confidence,
             image_mean_threshold=args.image_threshold,
             image_changed_fraction=args.changed_fraction,
@@ -72,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         from app.pipeline.translation_pipeline import TranslationPipeline
         from app.pipeline.worker import PipelineRunner
         from app.translation.cache import TranslationCache
-        from app.translation.mock_translator import MockTranslationProvider
+        from app.translation.registry import create_providers
         from app.ui.control_panel import ControlPanel
         from app.ui.controller import LensController
         from app.ui.overlay import LensOverlay
@@ -97,13 +104,16 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName("Translation Lens")
     app.setQuitOnLastWindowClosed(False)  # Hiding both windows during capture is not exit.
     lens = LensOverlay()
-    panel = ControlPanel(config.source_language, config.target_language, config.ocr_language)
+    panel = ControlPanel(
+        config.source_language, config.target_language, config.ocr_language, config.provider
+    )
 
     def pipeline_factory() -> TranslationPipeline:
+        providers = create_providers()
         return TranslationPipeline(
             MSSCaptureProvider(),
             PaddleOCRProvider(config.ocr_language),
-            MockTranslationProvider(),
+            providers[config.provider],
             ImageChangeDetector(
                 config.image_mean_threshold,
                 config.image_pixel_threshold,
@@ -112,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
             TranslationCache(config.cache_size),
             config.min_ocr_confidence,
             config.log_text,
+            providers=providers,
         )
 
     runner = PipelineRunner(pipeline_factory)
@@ -139,7 +150,8 @@ def main(argv: list[str] | None = None) -> int:
     heartbeat.timeout.connect(lambda: None)
     heartbeat.start(200)
     logger.info(
-        "Translation Lens started on %s; mock translation; images remain local", sys.platform
+        "Translation Lens started on %s; provider=%s; images remain local",
+        sys.platform, config.provider,
     )
     try:
         return app.exec()

@@ -15,14 +15,14 @@ Lens + controls
   |                                             | changed
   |                                         TranslationCache
   |                                             | miss
-  |                                         TranslationProvider (mock)
+  |                                         TranslationProvider registry
   | <--------- result + revision ----------------|
   | validate current revision, then render
 ```
 
 `app/capture` handles physical rectangles, RGB arrays, and visual comparison.
 `app/ocr` returns text/confidence/polygon records, independent of Qt.
-`app/translation` owns provider contracts and bounded LRU cache.
+`app/translation` owns provider contracts, provider registry, and bounded LRU cache.
 `app/pipeline` owns normalized-text deduplication, timings, worker lifecycle, and
 revision checks. `app/platform` isolates Win32 DPI, geometry, exclusion, click-through,
 and global hotkeys. `app/ui` owns widgets and GUI-thread coordination; the core
@@ -71,7 +71,7 @@ refresh monitor metadata using public APIs. Gaps between monitors have no conten
 Default capture interval: 350 ms, with no overlapping jobs. Visual comparison uses
 a downsampled grayscale image plus mean/local change thresholds. Compare against
 the last successfully processed image so gradual changes accumulate. Translation
-keys are `(source, target, normalized_text)` in a bounded in-memory LRU. Do not
+keys are `(provider, source, target, normalized_text)` in a bounded in-memory LRU. Do not
 commit detector/text success state on errors, so the same frame can retry.
 Empty text clears the display; unchanged text avoids a translation call. Providers
 report actionable, sanitized errors; failures back off and do not kill the GUI.
@@ -93,7 +93,7 @@ model initialization and possibly download; warm timings reflect inference.
 
 Future providers implement `OCRProvider.recognize(image)` or
 `TranslationProvider.translate(text, source_language, target_language)`. Create a
-new pipeline/cache when swapping translator instances to avoid mixing provider
+unique provider identifier for a new translator implementation to avoid mixing cached
 results. To replace mss, implement `CaptureProvider` with physical region semantics;
 the UI's visibility strategy and Windows acceptance tests must also be reviewed.
 
@@ -102,4 +102,49 @@ the UI's visibility strategy and Windows acceptance tests must also be reviewed.
 Capture arrays and cache are memory-only. No frame/history persistence or default
 recognized-text logging. An explicit text-log flag is separate from ordinary debug.
 Paddle model downloads may need network access initially; inference is local.
-Future online providers should send text only and have explicit timeouts and consent.
+Local Argos inference never updates an index or downloads models. Only the explicit
+installer does online setup. Optional Google sends recognized text only.
+
+## Translation providers
+
+The UI selects a provider identifier, and each `PipelineJob` carries that identifier
+to the worker. The worker resolves it from an injected registry; provider modules do
+not import Qt. The cache key is `(provider, source, target, normalized_text)`.
+
+`MockTranslationProvider` is deterministic and offline. `ArgosLocalTranslationProvider`
+is the default real provider (`argos-local`, English → Russian). Its constructor is
+lightweight; the first translation loads the optional engine on the existing worker.
+Each source/target translator is retained for subsequent texts and provider switches.
+Argos retains native model instances; the existing outer TranslationCache and text
+comparison prevent repeated inference for unchanged OCR. Registry instances last for
+the worker lifetime. Installing/replacing models externally requires an app restart
+to invalidate Argos's language graph, loaded translators, and translation cache.
+
+`app/translation/argos_local.py` is a version-specific adapter for Argos 1.11.0 and
+MiniSBD 0.9.5. Before importing Argos translate it forces local OPENNMT, CPU, MiniSBD,
+and disabled Argos payload logging, overriding inherited Argos process settings.
+Argos logs text at INFO even with debug off, so its `argostranslate.utils` logger
+is disabled before import as well as setting `ARGOS_DEBUG=0`.
+The provider sets `ORT_DISABLE_TELEMETRY=1` before pipeline processing and calls
+ONNX Runtime's `disable_telemetry_events()` before importing Argos translation.
+This prevents a configured remote Argos backend or spaCy's import-time model download.
+It resolves installed direct/pivot paths and traverses cached/composite/package
+translations, checking every sentence model. MiniSBD receives an absolute existing
+model path, never a language code/URL that could cause a download. Deleting that
+file causes an error instead of a network fallback. Unknown translation types fail
+closed. No index lookup occurs at runtime. Re-audit this adapter on dependency upgrades.
+
+`tools.install_translation_model` is a separate explicit online command. It updates
+the package index, installs a selected direct translation package, and downloads/
+initializes the source MiniSBD model. The runtime accepts valid installed pivots;
+the installer requires each leg to be requested explicitly. Auto source is rejected
+with actionable guidance. A missing dependency/model returns TranslationError through
+the existing retry/status path; users can pause, install and restart, or select Mock.
+No silent cloud/mock fallback or screenshots/text-history persistence is introduced.
+
+`GoogleCloudTranslationProvider`
+uses the Google Cloud Translation Basic REST API with a 15-second timeout by default.
+It sends JSON containing only OCR text, target, optional source, and `format=text`.
+The API key is read from `GOOGLE_TRANSLATE_API_KEY`; errors are sanitized before they
+reach the control panel. DeepL, Google Advanced, Azure, OpenAI/LLM, and other local models
+can implement the same protocol later without UI changes.

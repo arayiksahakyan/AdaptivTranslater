@@ -47,6 +47,8 @@ class FakeOCR:
 
 
 class FakeTranslator:
+    provider_id = "custom"
+
     def __init__(self):
         self.calls = []
         self.error = None

@@ -7,3 +7,5 @@ class MockTranslationProvider:
     def translate(self, text: str, source_language: str, target_language: str) -> str:
         validate_languages(source_language, target_language)
         return f"[MOCK {source_language} → {target_language}]\n{text}" if text else ""
+
+    provider_id = "mock"

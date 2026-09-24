@@ -15,8 +15,9 @@ class AppConfig:
     min_ocr_confidence: float = 0.60
     cache_size: int = 256
     ocr_language: str = "en"
-    source_language: str = "auto"
-    target_language: str = "en"
+    source_language: str = "en"
+    target_language: str = "ru"
+    provider: str = "argos-local"
     log_text: bool = False
 
     def __post_init__(self) -> None:
@@ -38,3 +39,5 @@ class AppConfig:
             raise ValueError("Cache capacity must be positive.")
         if not self.ocr_language.strip():
             raise ValueError("OCR model language must not be empty.")
+        if self.provider not in {"mock", "google-cloud-basic", "argos-local"}:
+            raise ValueError("Provider must be mock, google-cloud-basic, or argos-local.")

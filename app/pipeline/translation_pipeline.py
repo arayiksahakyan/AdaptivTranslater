@@ -27,6 +27,7 @@ class PipelineJob:
     region: CaptureRegion
     source_language: str
     target_language: str
+    provider_name: str = "custom"
 
 
 @dataclass(frozen=True)
@@ -52,12 +53,14 @@ class TranslationPipeline:
         cache: TranslationCache | None = None,
         min_confidence: float = 0.6,
         log_text: bool = False,
+        providers: dict[str, TranslationProvider] | None = None,
     ) -> None:
         if not 0 <= min_confidence <= 1:
             raise ValueError("Confidence must be in [0, 1].")
         self.capture = capture
         self.ocr = ocr
         self.translator = translator
+        self.providers = providers or {getattr(translator, "provider_id", "custom"): translator}
         self.detector = detector if detector is not None else ImageChangeDetector()
         self.cache = cache if cache is not None else TranslationCache()
         self.min_confidence = min_confidence
@@ -114,15 +117,16 @@ class TranslationPipeline:
             if text == self._last_text:
                 self.detector.commit(image)
                 return result("unchanged_text")
-            key = (job.source_language, job.target_language, text)
+            provider = self.providers.get(job.provider_name)
+            if provider is None:
+                raise TranslationError(f"Translation provider is unavailable: {job.provider_name}.")
+            key = (job.provider_name, job.source_language, job.target_language, text)
             translated = self.cache.get(key)
             cache_hit = translated is not None
             if translated is None:
                 started = perf_counter()
                 try:
-                    translated = self.translator.translate(
-                        text, job.source_language, job.target_language
-                    )
+                    translated = provider.translate(text, job.source_language, job.target_language)
                     if not isinstance(translated, str) or not translated.strip():
                         raise TranslationError(
                             "Translation provider returned an empty or invalid result."

@@ -20,12 +20,22 @@ item remains incomplete even when its implementation passes Linux tests.
 - [ ] Validate capture exclusion and hide/settle/restore on Windows (IMPLEMENTED;
   scheduling/visibility tested offscreen, physical pixels still unverified).
 - [x] Integrate real PaddleOCR with confidence filtering and timing; Linux smoke passed.
-- [x] Add labeled mock translation and language-aware cache; automated tests pass.
+- [x] Add labeled mock translation and provider-aware cache; automated tests pass.
+- [x] Add opt-in Google Cloud Translation Basic text-only provider with sanitized
+  timeout/error handling and mocked network tests.
+- [x] Add free `argos-local` provider as the preferred real development default,
+  explicit translation/sentence-model installer, offline guards, and retained models.
+- [x] Test Argos creation, errors, model/path checks, pivots, cache, selection,
+  and worker responsiveness on Linux with mocked Argos (no model downloads).
+- [ ] Run optional real English → Russian Argos smoke on Windows.
+- [ ] Verify Windows PaddleOCR + Argos → overlay with Internet disconnected and
+  no translation network activity, including first-load and sustained responsiveness.
 - [x] Run pipeline outside GUI thread; test stale results, cancellation, and cleanup.
 - [x] Add/test controls, language choices, status, errors, start/pause, and timing.
 - [ ] Verify implemented Windows click-through and registered global shortcuts.
+- [ ] Verify Google Cloud Translation on Windows with a user-configured key.
 - [x] Test recoverable errors, duplicate text, retries, stale jobs, and shutdown.
-- [x] Execute Linux automated/Qt integration checks and record results (94 passed).
+- [x] Execute Linux automated/Qt integration checks and record results (142 passed).
 - [x] Execute real local OCR smoke test (English mobile models; cached/offline run).
 - [ ] Verify Windows launch, transparency, geometry, capture, and contamination.
 - [ ] Verify Windows 100/125/150/200% DPI and mixed-DPI/negative-origin monitors.
@@ -37,13 +47,13 @@ item remains incomplete even when its implementation passes Linux tests.
 - [ ] Tune OCR on real desktop/game fonts and publish performance measurements.
 - [ ] Improve layout/read order and text-position preservation.
 - [ ] Add settings persistence, multiple lenses, and accessibility refinements.
-- [ ] Add automatic OCR language detection and local translation provider.
+- [ ] Add automatic OCR language detection; local Argos translation is implemented.
 - [ ] Evaluate Windows Graphics Capture and packaged Windows distributions.
 
 ## Phase 3: context-aware translation
 
 - [ ] Add explicit contextual memory controls, terminology, and subtitle modes.
-- [ ] Evaluate local LLMs and real translation providers with privacy controls.
+- [ ] Evaluate additional real providers, local models, and privacy controls.
 
 ## Phase 4: commercial/cloud version (planning only)
 

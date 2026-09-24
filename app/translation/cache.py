@@ -2,7 +2,7 @@ import logging
 from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
-CacheKey = tuple[str, str, str]
+CacheKey = tuple[str, ...]
 
 
 class TranslationCache:

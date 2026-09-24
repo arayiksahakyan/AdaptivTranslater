@@ -1,0 +1,4 @@
+# Optional runtime for real, offline translation. No language models included.
+# MiniSBD is pinned because the offline adapter verifies its local-file behavior.
+argostranslate==1.11.0
+minisbd==0.9.5
